@@ -1,14 +1,17 @@
+from unicodedata import name
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+'''
+Authoor: Shusen Lin
+Program goal: using the quadtree to represent a 2D grid map, which can be used for multi-resolution purpose
+'''
 
 class Node:
     def __init__(self, idx, rmin, rmax, cmin, cmax, map, depth_max, resolution):
         '''
         The main quadtree node, each node has four default children node
-        
-        
         '''
         self.bounds = (rmin, rmax, cmin, cmax)
         self.idx = idx
@@ -51,11 +54,10 @@ class QuadTree:
         height,width = map.shape
         self.node = Node('0', 0, height, 0, width, self.map, depth_max, resolution)
     
-######################################################################################################################
-# For visualization
 
 def extract_end_node (node):
     '''
+    visuallization purpose
     '''
     end_nodes = []
     
@@ -67,7 +69,7 @@ def extract_end_node (node):
 
     return end_nodes
     
-################################################################################
+
 def bounds2lines (bounds):
     '''
     takes the boundary of a rectangle in column-row coordinates
@@ -79,48 +81,44 @@ def bounds2lines (bounds):
             ((cmin, rmin), (cmax, rmin)),
             ((cmax, rmin), (cmax, rmax)))
 
-########## load map
-envmap = np.loadtxt('maps/map3.txt')
-plt.imsave('test.png',envmap, dpi = 500,cmap = 'Greys')
+if __name__ == '__main__':
+    #load your map, and choose the map you want to implement here, please only use map 1,3,7 here
+    envmap = np.loadtxt('maps/map3.txt')
+    plt.imsave('test.png',envmap, dpi = 500,cmap = 'Greys')
 
-filename = 'test.png'
+    filename = 'test.png'
+    img = cv2.imread( filename, cv2.IMREAD_GRAYSCALE) 
 
-img = cv2.imread( filename, cv2.IMREAD_GRAYSCALE) 
+    #visuallization source: https://github.com/saeedghsh/occupancy2quadtree
 
-tic = time.time()
+    tic = time.time()
 
-qt = QuadTree(envmap, depth_max=30, resolution=1)
+    qt = QuadTree(envmap, depth_max=30, resolution=1)
 
-my_map = qt.img_bin
-# qt = QuadTree(img, depth_max=10, resolution=10)
-# qt = QuadTree(img, depth_max=9, resolution=1)
-print('time to complete: {:.5f}'.format(time.time()-tic))
-# lines = [bounds2lines(en.bounds) for en in extract_end_node(qt.node)]
-# print('number of end nodes: {:d}'.format(len(lines)))
+    my_map = qt.map
 
-# since I just want the lines for plotting, use set to remove duplicates
-lines = list(set([l for en in extract_end_node(qt.node) for l in bounds2lines(en.bounds)]))
-print('number of end nodes: {:d}'.format(len(lines)))
+    print('time to complete: {:.5f}'.format(time.time()-tic))
 
-if 1:
-    max_size = 12
-    h, w = img.shape
-    H,W = [max_size, (float(w)/h)*max_size] if (h > w) else [(float(h)/w)*max_size, max_size]
-    fig, axes = plt.subplots(1,1, figsize=(W, H))
+    lines = list(set([l for en in extract_end_node(qt.node) for l in bounds2lines(en.bounds)]))
+    print('number of end nodes: {:d}'.format(len(lines)))
 
-    if 0:
-        # plot lines with matplotlib - vector quality for print
-        axes.imshow(img, cmap='gray', alpha=1, interpolation='nearest', origin='lower')
-        for l in lines: axes.plot( [l[0][0], l[1][0]], [l[0][1], l[1][1]], 'b-')
+    if 1:
+        max_size = 50
+        h, w = img.shape
+        H,W = [max_size, (float(w)/h)*max_size] if (h > w) else [(float(h)/w)*max_size, max_size]
+        fig, axes = plt.subplots(1,1, figsize=(W, H))
 
-    else:
-        # plot lines with opencv - way faster
-        img_cv = np.stack([img for _ in range(3)], axis=2)
-        for l in lines: cv2.line(img_cv, l[0], l[1], (0,0,255), 1)
-        axes.imshow(img_cv, alpha=1, interpolation='nearest', origin='lower')
-                
-    # axes.plot(X,Y, 'r,')
+        if 0:
+            # plot lines with matplotlib - vector quality for print
+            axes.imshow(img, cmap='gray', alpha=1, interpolation='nearest', origin='lower')
+            for l in lines: axes.plot( [l[0][0], l[1][0]], [l[0][1], l[1][1]], 'b-')
 
-    axes.axis('off')
-    plt.tight_layout()
-    plt.show()
+        else:
+            # plot lines with opencv - way faster
+            img_cv = np.stack([img for _ in range(3)], axis=2)
+            for l in lines: cv2.line(img_cv, l[0], l[1], (0,0,255), 1)
+            axes.imshow(img_cv, alpha=1, interpolation='nearest', origin='lower')
+                    
+        axes.axis('off')
+        plt.tight_layout()
+        plt.show()
