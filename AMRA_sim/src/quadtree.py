@@ -80,7 +80,7 @@ def bounds2lines (bounds):
             ((cmax, rmin), (cmax, rmax)))
 
 ########## load map
-envmap = np.loadtxt('map3.txt')
+envmap = np.loadtxt('maps/map3.txt')
 plt.imsave('test.png',envmap, dpi = 500,cmap = 'Greys')
 
 filename = 'test.png'
