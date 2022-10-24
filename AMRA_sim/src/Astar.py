@@ -4,9 +4,10 @@ import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
 '''
-This is experimental test code for A-star search, it can only implement on 
-the statical target, since this algorithm does not apply the priority dictionary 
-yet, for large map like map3b, map3c, map1 and map7 may goes very slow, run this code 
+Author: Shusen Lin
+
+This is experimental test code for A-star search, algorithm does apply the 
+priority dictionary, for the challenge map7 may goes slow, run this code 
 will return the search space, moving trajectory and searching time.
 
 '''
@@ -39,7 +40,15 @@ class A_star:
   '''
   def the class for A star algorithm
   '''
+  def __init__(self) -> None:
+    
+    self.open_list = pqdict({})
+    self.envmap = envmap
+
   class node:
+    '''
+    define the Atart node
+    '''
     def __init__(self,parent=None,position=None):
       self.pos = position
       self.parent = []
@@ -47,8 +56,7 @@ class A_star:
       self.g = np.inf
       self.h = 0
       self.f = np.inf
-      self.open_list = pqdict({})
-      
+
     def __str__(self):
       string = 'pos: ('+str(self.pos) + "), g: "+str(self.g)+ ", h: "+str(self.h) + ' '+str(self.parent)
       return string
@@ -58,6 +66,9 @@ class A_star:
  
 
   class state_space:
+    '''
+    define the state space
+    '''
     def __init__(self,row,col) -> None:
         self.open_graph = pqdict({})
 
@@ -67,7 +78,12 @@ class A_star:
       status = self.open_graph[key]
       return status
     
+
   def motion_model():
+    '''
+    The motion model for resolution =1 map, need change for multi-resolution
+    
+    '''
     motion = [[-1, 0], # move up
               [0 ,-1], # move left
               [1 , 0], # move down
@@ -108,7 +124,7 @@ class A_star:
 
     return action
 
-  def Go_Astar(env,start_pos,epsilon=1):
+  def Go_Astar(self,env,start_pos,epsilon=1):
     envmap = env.map
     state_graph = {}
     len_row, len_col = env.map.shape
@@ -121,44 +137,41 @@ class A_star:
     start_node.g = 0
     start_node.h = env.getHeuristic(start_node,epsilon)
     start_node.f = start_node.g + start_node.h
+
+    state_graph[str(tuple(start_pos))] = {'open?':True,'node':start_node}
+
     env.goal_node.g = env.goal_node.f = np.inf
     env.goal_node.h = env.getHeuristic(env.goal_node,epsilon)
 
-    open_list = [start_node]
+    self.open_list[str(tuple(start_node.pos))] = start_node.f
     closed_list = []
 
     iteration = 0
     len_row, len_col = env.map.shape
     motion = A_star.motion_model()
+    print('A-star calculating...')
 
-    while len(open_list) > 0:
+    while len(self.open_list) > 0:
         # while end_node not in closed_list:
         iteration+=1  
-        print('iteration in: '+str(iteration))
-        smallest_node = open_list[0]
-        
-        for open_node in open_list:  #find the smallest f value node
-          state_graph[str(open_node.pos)] = {'open?':True,'node':open_node}
+      
+        smallest_node_pos = self.open_list.popitem()[0]
+        # print('iteration in: '+ str(iteration) + smallest_node_pos )
 
-          if open_node.f <= smallest_node.f:
-              smallest_node = open_node
+        closed_list.append( state_graph[smallest_node_pos]['node'])
 
-        print(smallest_node.pos)
-    
-        for o_idx, open_node in enumerate(open_list):#remove th samllest f value node from open to closed
-          if open_node.f == smallest_node.f:
-              closed_list.append(open_node)
-              open_list.pop(o_idx)
+        state_graph[smallest_node_pos]['open?'] = False
 
-              state_graph[str(open_node.pos)] = {'open?':False,'node':open_node}
-
-              if open_node ==  env.goal_node:
+        if  state_graph[smallest_node_pos]['node'] ==  env.goal_node:
+            print("A-star return!")
                   # return open_node
-                  return A_star.recover_path(open_node),state_graph
+            return A_star.recover_path(state_graph[smallest_node_pos]['node']), state_graph
+            # return state_graph
 
         stage_cost = 1 
         for closed_node in closed_list:
           for move in motion:
+            # print('one move')
             x_pos = closed_node.pos[0] + move[0]
             y_pos = closed_node.pos[1] + move[1]
             node_pos = (x_pos,y_pos)
@@ -177,18 +190,22 @@ class A_star:
                 continue
 
             if state_graph[str(node_pos)] == None:
-              child = A_star.node(closed_node,tuple(node_pos))
-              child.g = closed_node.g + stage_cost
-              child.h = env.getHeuristic(child,epsilon)
-              child.f = child.g + child.h
-              state_graph[str(node_pos)] = {'open?':True,'node':child}
-              open_list.append(state_graph[str(node_pos)]['node'])
+                child  = A_star.node(closed_node,tuple(node_pos))
+                child.g = closed_node.g + stage_cost
+                child.h = env.getHeuristic(child,epsilon)
+                child.f = child.g + child.h
+
+                state_graph[str(node_pos)] = {'open?':True,'node':child}
+
+                self.open_list[str(node_pos)] = child.f
 
             else:
               state_graph[str(node_pos)]['node'].parent.append(closed_node)
               state_graph[str(node_pos)]['node'].g = min((closed_node.g + stage_cost),state_graph[str(node_pos)]['node'].g)
               state_graph[str(node_pos)]['node'].f = state_graph[str(node_pos)]['node'].g + state_graph[str(node_pos)]['node'].h
               state_graph[str(node_pos)]['open?'] = True
+
+          closed_list.pop(0)
 
 if __name__ == '__main__':
 
@@ -204,16 +221,16 @@ if __name__ == '__main__':
     #test map3 case 1
     robotstart = np.array([249, 249])
     targetstart = np.array([399, 399])
-    #test map3 case 2
+    # #test map3 case 2
     robotstart = np.array([74, 249])
     targetstart = np.array([399, 399])
-    #test map3 case 3
+    # # #test map3 case 3
     robotstart = np.array([4, 399])
     targetstart = np.array([399, 399])
 
-    envmap = loadtxt('maps/map4.txt')
-    robotstart = np.array([0, 0])
-    targetstart = np.array([5, 6])
+    # envmap = loadtxt('maps/map4.txt')
+    # robotstart = np.array([0, 0])
+    # targetstart = np.array([5, 6])
 
     # envmap = loadtxt('maps/map5.txt')
     # robotstart = np.array([0, 0])
@@ -227,9 +244,19 @@ if __name__ == '__main__':
     robotstart = np.array([249, 1199])
     targetstart = np.array([1649, 1899])
 
+    # envmap = loadtxt('maps/map7.txt')
+    # robotstart = np.array([1, 1])
+    # targetstart = np.array([4998, 4998])
+
     env = Env(targetstart,envmap)
     t0 = tic()
-    path,graph = A_star.Go_Astar(env,robotstart,epsilon=3)
+    
+    Astar = A_star()
+
+    path,graph = Astar.Go_Astar(env,robotstart,epsilon=3)
+    
+    # graph = Astar.Go_Astar(env,robotstart,epsilon=3)
+
     toc(t0,'A-star get_path')
     now_pos = robotstart
     img = envmap
