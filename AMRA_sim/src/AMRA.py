@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
 '''
-Author: Shusen Lin, Rohan Bosworth
+Author: Shusen Lin
 
 This is experimental test code for A-star search, algorithm does apply the 
 priority dictionary, for the challenge map7 may goes slow, run this code 
@@ -40,7 +40,7 @@ class A_star:
   '''
   def the class for A star algorithm
   '''
-  def __init__(self) -> None:
+  def __init__(self,env,resolution=0):
     
     self.open_list = pqdict({})
     self.envmap = env.map
@@ -50,6 +50,7 @@ class A_star:
       for jdx in range(len_col):
         key = str((idx,jdx))
         self.state_graph[key] = None
+    self.resolution = resolution
 
   class node:
     '''
@@ -70,7 +71,6 @@ class A_star:
     def __eq__(self, other):
       return self.pos == other.pos
  
-
   class state_space:
     '''
     define the state space
@@ -113,7 +113,6 @@ class A_star:
         for action in motion:
           if move == tuple(action):
             return tuple(action)
-
       return 'invalid move'
 
   def recover_path(current_node):
@@ -137,9 +136,18 @@ class A_star:
     '''
     The function to check the window whhether is occupied or free
     '''
-    return True
+    half = int(((3**resolution)-1)/2)
+    rmin = center[0] - half
+    rmax = center[0] + half
+    cmin = center[1] - half
+    cmax = center[1] + half
+    check = self.envmap[rmin:rmax , cmin:cmax].sum()
+    return check != 0 
+  
+  def stage_cost(start_pos,end_pos):
+    return np.linalg.norm(start_pos-end_pos)
 
-  def Go_Astar(self,env,start_pos, resolutions = 3, epsilon=1):
+  def Go_Astar(self,start_pos,epsilon=1):
     '''
     The main loop to implement the Astar algorithm
     '''
@@ -163,42 +171,55 @@ class A_star:
     while len(self.open_list) > 0:
         # while end_node not in closed_list:
         iteration+=1  
+        print(iteration)
         smallest_node_pos = self.open_list.popitem()[0]
         closed_list.append( self.state_graph[smallest_node_pos]['node'])
         self.state_graph[smallest_node_pos]['open?'] = False
 
-        if  self.state_graph[smallest_node_pos]['node'] ==  env.goal_node:
+        if self.state_graph[smallest_node_pos]['node'] ==  env.goal_node:
             print("A-star return!")
             # return open_node
-            return A_star.recover_path(self.state_graph[smallest_node_pos]['node']), self.state_graph
+            return self.state_graph
+            # return A_star.recover_path(self.state_graph[smallest_node_pos]['node']), self.state_graph
             # return state_graph
 
         stage_cost = 1 
         for closed_node in closed_list:
-          for resolution_iter in reversed(range(resolutions)):
+          for resolution_iter in reversed(range(self.resolution)):
             motion = A_star.motion_model(resolution_iter)
             for move in motion:
               # print('one move')
               x_pos = closed_node.pos[0] + move[0]
               y_pos = closed_node.pos[1] + move[1]
-              node_pos = (x_pos,y_pos)
+              closed_pos = 
+              node_pos = np.array([x_pos,y_pos])
               # the following is to check the if the movment is valid
               if ( node_pos[0] < 0 or node_pos[0] >= self.envmap.shape[0] or node_pos[1] < 0 or node_pos[1] >= self.envmap.shape[1] ):
               # print('ERROR: out-of-map robot position commanded\n')
-                continue
+                if resolution_iter == 0:
+                  continue
+                else:
+                  break
               elif ( self.envmap[node_pos[0], node_pos[1]] != 0 ): #check the center point first 
               # print('ERROR: invalid robot position commanded\n')
-                continue
-              elif s
-
-
+                if resolution_iter == 0:
+                  continue
+                else:
+                  break
+              elif self.check_window(node_pos,resolution_iter):#check whether the window is occupied 
+                if resolution_iter == 0:
+                  continue
+                else:
+                  break
               elif self.state_graph[str(node_pos)] != None:
                 if self.state_graph[str(node_pos)]['open?'] == False:
-                  continue
-
+                  if resolution_iter == 0:
+                    continue
+                  else:
+                    break
               if self.state_graph[str(node_pos)] == None:
                   child  = A_star.node(closed_node,tuple(node_pos))
-                  child.g = closed_node.g + stage_cost
+                  child.g = closed_node.g + stage_cost(closed_node.pos,node_pos)
                   child.h = env.getHeuristic(child,epsilon)
                   child.f = child.g + child.h
                   self.state_graph[str(node_pos)] = {'open?':True,'node':child}
@@ -210,7 +231,7 @@ class A_star:
                   self.state_graph[str(node_pos)]['node'].f = self.state_graph[str(node_pos)]['node'].g + self.state_graph[str(node_pos)]['node'].h
                   self.state_graph[str(node_pos)]['open?'] = True
 
-            closed_list.pop(0)
+          closed_list.pop(0)
 
 if __name__ == '__main__':
 
@@ -245,9 +266,9 @@ if __name__ == '__main__':
     # robotstart = np.array([0, 0])
     # targetstart = np.array([29, 36])
 
-    envmap = loadtxt('maps/map1.txt')
-    robotstart = np.array([249, 1199])
-    targetstart = np.array([1649, 1899])
+    # envmap = loadtxt('maps/map1.txt')
+    # robotstart = np.array([249, 1199])
+    # targetstart = np.array([1649, 1899])
 
     # envmap = loadtxt('maps/map7.txt')
     # robotstart = np.array([1, 1])
@@ -256,9 +277,11 @@ if __name__ == '__main__':
     env = Env(targetstart,envmap)
     t0 = tic()
     
-    Astar = A_star()
+    Astar = A_star(env,resolution=4)
 
     path,graph = Astar.Go_Astar(env,robotstart,epsilon=3)
+
+    # graph = Astar.Go_Astar(robotstart,epsilon=3)
     
     # graph = Astar.Go_Astar(env,robotstart,epsilon=3)
 
