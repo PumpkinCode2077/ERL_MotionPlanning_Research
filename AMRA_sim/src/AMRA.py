@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
 '''
-Author: Shusen Lin
+Author: Shusen Lin, Rohan Bosworth
 
 This is experimental test code for A-star search, algorithm does apply the 
 priority dictionary, for the challenge map7 may goes slow, run this code 
@@ -43,7 +43,13 @@ class A_star:
   def __init__(self) -> None:
     
     self.open_list = pqdict({})
-    self.envmap = envmap
+    self.envmap = env.map
+    self.state_graph = {}
+    len_row, len_col = env.map.shape
+    for idx in range(len_row):
+      for jdx in range(len_col):
+        key = str((idx,jdx))
+        self.state_graph[key] = None
 
   class node:
     '''
@@ -79,13 +85,13 @@ class A_star:
       return status
     
 
-  def motion_model(n=1):
+  def motion_model(n=0):
     '''
-    The motion model for resolution =1 map, need change for multi-resolution
+    The motion model for multi-sacle features grid map, which depends on the power 3
     
     '''
     #1 is the lowest, anchor resolution. Greater values result in coarser resolutions
-    scalar = (n-1) * 3
+    scalar = n ** 3
     motion = [[-scalar, 0], # move up
               [0 ,-scalar], # move left
               [scalar , 0], # move down
@@ -126,22 +132,23 @@ class A_star:
       current_node = optimal_parent
 
     return action
+  
+  def check_window(self,center,resolution):
+    '''
+    The function to check the window whhether is occupied or free
+    '''
+    return True
 
-  def Go_Astar(self,env,start_pos, resolutions = 2, epsilon=1):
-    envmap = env.map
-    state_graph = {}
-    len_row, len_col = env.map.shape
-    for idx in range(len_row):
-      for jdx in range(len_col):
-        key = str((idx,jdx))
-        state_graph[key] = None
-
+  def Go_Astar(self,env,start_pos, resolutions = 3, epsilon=1):
+    '''
+    The main loop to implement the Astar algorithm
+    '''
     start_node = A_star.node(None,tuple(start_pos))
     start_node.g = 0
     start_node.h = env.getHeuristic(start_node,epsilon)
     start_node.f = start_node.g + start_node.h
 
-    state_graph[str(tuple(start_pos))] = {'open?':True,'node':start_node}
+    self.state_graph[str(tuple(start_pos))] = {'open?':True,'node':start_node}
 
     env.goal_node.g = env.goal_node.f = np.inf
     env.goal_node.h = env.getHeuristic(env.goal_node,epsilon)
@@ -150,68 +157,60 @@ class A_star:
     closed_list = []
 
     iteration = 0
-    len_row, len_col = env.map.shape
     motion = A_star.motion_model(1)
     print('A-star calculating...')
 
     while len(self.open_list) > 0:
         # while end_node not in closed_list:
         iteration+=1  
-
-        # update the motion model (Round Robin selection)
-        motion = A_star.motion_model(iteration % resolutions)
-      
         smallest_node_pos = self.open_list.popitem()[0]
-        # print('iteration in: '+ str(iteration) + smallest_node_pos )
+        closed_list.append( self.state_graph[smallest_node_pos]['node'])
+        self.state_graph[smallest_node_pos]['open?'] = False
 
-        closed_list.append( state_graph[smallest_node_pos]['node'])
-
-        state_graph[smallest_node_pos]['open?'] = False
-
-        if  state_graph[smallest_node_pos]['node'] ==  env.goal_node:
+        if  self.state_graph[smallest_node_pos]['node'] ==  env.goal_node:
             print("A-star return!")
-                  # return open_node
-            return A_star.recover_path(state_graph[smallest_node_pos]['node']), state_graph
+            # return open_node
+            return A_star.recover_path(self.state_graph[smallest_node_pos]['node']), self.state_graph
             # return state_graph
 
         stage_cost = 1 
         for closed_node in closed_list:
-          for move in motion:
-            # print('one move')
-            x_pos = closed_node.pos[0] + move[0]
-            y_pos = closed_node.pos[1] + move[1]
-            node_pos = (x_pos,y_pos)
-            # the following is to check the if the movment is valid
-            if ( node_pos[0] < 0 or node_pos[0] >= envmap.shape[0] or node_pos[1] < 0 or node_pos[1] >= envmap.shape[1] ):
-            # print('ERROR: out-of-map robot position commanded\n')
-              continue
-            elif ( envmap[node_pos[0], node_pos[1]] != 0 ):
-            # print('ERROR: invalid robot position commanded\n')
-              continue
-            elif (abs(node_pos[0]-node_pos[0]) > 1 or abs(node_pos[1]-node_pos[1]) > 1):
-            # print('ERROR: invalid robot move commanded\n')
-              continue
-            elif state_graph[str(node_pos)] != None:
-              if state_graph[str(node_pos)]['open?'] == False:
+          for resolution_iter in reversed(range(resolutions)):
+            motion = A_star.motion_model(resolution_iter)
+            for move in motion:
+              # print('one move')
+              x_pos = closed_node.pos[0] + move[0]
+              y_pos = closed_node.pos[1] + move[1]
+              node_pos = (x_pos,y_pos)
+              # the following is to check the if the movment is valid
+              if ( node_pos[0] < 0 or node_pos[0] >= self.envmap.shape[0] or node_pos[1] < 0 or node_pos[1] >= self.envmap.shape[1] ):
+              # print('ERROR: out-of-map robot position commanded\n')
                 continue
+              elif ( self.envmap[node_pos[0], node_pos[1]] != 0 ): #check the center point first 
+              # print('ERROR: invalid robot position commanded\n')
+                continue
+              elif s
 
-            if state_graph[str(node_pos)] == None:
-                child  = A_star.node(closed_node,tuple(node_pos))
-                child.g = closed_node.g + stage_cost
-                child.h = env.getHeuristic(child,epsilon)
-                child.f = child.g + child.h
 
-                state_graph[str(node_pos)] = {'open?':True,'node':child}
+              elif self.state_graph[str(node_pos)] != None:
+                if self.state_graph[str(node_pos)]['open?'] == False:
+                  continue
 
-                self.open_list[str(node_pos)] = child.f
+              if self.state_graph[str(node_pos)] == None:
+                  child  = A_star.node(closed_node,tuple(node_pos))
+                  child.g = closed_node.g + stage_cost
+                  child.h = env.getHeuristic(child,epsilon)
+                  child.f = child.g + child.h
+                  self.state_graph[str(node_pos)] = {'open?':True,'node':child}
+                  self.open_list[str(node_pos)] = child.f
 
-            else:
-              state_graph[str(node_pos)]['node'].parent.append(closed_node)
-              state_graph[str(node_pos)]['node'].g = min((closed_node.g + stage_cost),state_graph[str(node_pos)]['node'].g)
-              state_graph[str(node_pos)]['node'].f = state_graph[str(node_pos)]['node'].g + state_graph[str(node_pos)]['node'].h
-              state_graph[str(node_pos)]['open?'] = True
+              elif (closed_node.g + stage_cost) < self.state_graph[str(node_pos)]['node'].g:
+                  self.state_graph[str(node_pos)]['node'].parent = closed_node
+                  self.state_graph[str(node_pos)]['node'].g = closed_node.g + stage_cost
+                  self.state_graph[str(node_pos)]['node'].f = self.state_graph[str(node_pos)]['node'].g + self.state_graph[str(node_pos)]['node'].h
+                  self.state_graph[str(node_pos)]['open?'] = True
 
-          closed_list.pop(0)
+            closed_list.pop(0)
 
 if __name__ == '__main__':
 
