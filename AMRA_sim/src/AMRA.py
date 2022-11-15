@@ -4,13 +4,17 @@ import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
 '''
-Author: Shusen Lin
+Author: Shusen Lin, Rohan Bosworth
+This is the AMRA demo programm developed for ERL motion planning research purpose
+This A* algorithm with multi-resolution and multi-heursitic strategies 
 
-This is experimental test code for A-star search, algorithm does apply the 
-priority dictionary, for the challenge map7 may goes slow, run this code 
-will return the search space, moving trajectory and searching time.
-
+Update the Multiresolution - large map test needed
+Need to update the multi-heuristic
 '''
+TEST_MAP = 2 #1->large map, 2->medium map, 3->small map
+RES = 10 #largest resolution for search, 3**RES
+EPSLION = 10 #weighted A* parameters
+NORM = 1 # option for h value
 
 def tic():
   return time.time()
@@ -30,9 +34,10 @@ class Env:
   def getHeuristic(self,input_node,epslion):
     x_distance = np.abs(input_node.pos[0]-self.goal_node.pos[0])
     y_distance = np.abs(input_node.pos[1]-self.goal_node.pos[1])
-
-    h_value = x_distance+y_distance# norm 1  
-    # h_value = np.math.sqrt(x_distance^2 + y_distance^2)# norm 2
+    if NORM == 1:
+      h_value = x_distance+y_distance# norm 1  
+    elif NORM == 2:
+      h_value = np.linalg.norm([x_distance,y_distance])
 
     return h_value*epslion
 
@@ -40,12 +45,14 @@ class A_star:
   '''
   def the class for A star algorithm
   '''
-  def __init__(self,env,resolution=0):
+  def __init__(self,env,resolution=1):
     
     self.open_list = pqdict({})
-    self.envmap = env.map
+    # self.envmap = env.map
+    self. env = env
+    self.envmap = self.env.map
     self.state_graph = {}
-    len_row, len_col = env.map.shape
+    len_row, len_col = self.env.map.shape
     for idx in range(len_row):
       for jdx in range(len_col):
         key = str((idx,jdx))
@@ -58,8 +65,7 @@ class A_star:
     '''
     def __init__(self,parent=None,position=None):
       self.pos = position
-      self.parent = []
-      self.parent.append(parent)
+      self.parent = parent
       self.g = np.inf
       self.h = 0
       self.f = np.inf
@@ -84,14 +90,13 @@ class A_star:
       status = self.open_graph[key]
       return status
     
-
   def motion_model(n=0):
     '''
     The motion model for multi-sacle features grid map, which depends on the power 3
     
     '''
     #1 is the lowest, anchor resolution. Greater values result in coarser resolutions
-    scalar = n ** 3
+    scalar = 3**n
     motion = [[-scalar, 0], # move up
               [0 ,-scalar], # move left
               [scalar , 0], # move down
@@ -107,29 +112,13 @@ class A_star:
       if parent_node is not None:
         x_move = child_node.pos[0] - parent_node.pos[0]
         y_move = child_node.pos[1] - parent_node.pos[1]
-        move = (x_move,y_move)
-        #TODO: Change action back for multiple resolutions
-        motion = A_star.motion_model(1)
-        for action in motion:
-          if move == tuple(action):
-            return tuple(action)
-      return 'invalid move'
+      return (x_move,y_move)
 
   def recover_path(current_node):
     action = []
-    while current_node.parent[0] is not None:
-      smallest_idx = 0
-      smallest_g = current_node.parent[0].g
-      for p_dx, p_node in enumerate(current_node.parent):
-        if p_node.g < smallest_g:
-          smallest_g = p_node.g
-          smallest_idx = p_dx
-
-      optimal_parent = current_node.parent[smallest_idx]
-      # if optimal_parent is not None:
-      action.insert(0,A_star.action_back(current_node,optimal_parent))
-      current_node = optimal_parent
-
+    while current_node.parent is not None:
+      action.insert(0,A_star.action_back(current_node,current_node.parent))
+      current_node = current_node.parent
     return action
   
   def check_window(self,center,resolution):
@@ -144,8 +133,9 @@ class A_star:
     check = self.envmap[rmin:rmax , cmin:cmax].sum()
     return check != 0 
   
-  def stage_cost(start_pos,end_pos):
+  def stage_cost(self,start_pos,end_pos):
     return np.linalg.norm(start_pos-end_pos)
+    # return 1
 
   def Go_Astar(self,start_pos,epsilon=1):
     '''
@@ -153,139 +143,121 @@ class A_star:
     '''
     start_node = A_star.node(None,tuple(start_pos))
     start_node.g = 0
-    start_node.h = env.getHeuristic(start_node,epsilon)
+    start_node.h = self.env.getHeuristic(start_node,epsilon)
     start_node.f = start_node.g + start_node.h
 
     self.state_graph[str(tuple(start_pos))] = {'open?':True,'node':start_node}
 
-    env.goal_node.g = env.goal_node.f = np.inf
-    env.goal_node.h = env.getHeuristic(env.goal_node,epsilon)
+    self.env.goal_node.g = self.env.goal_node.f = np.inf
+    self.env.goal_node.h = self.env.getHeuristic(self.env.goal_node,epsilon)
 
     self.open_list[str(tuple(start_node.pos))] = start_node.f
     closed_list = []
 
     iteration = 0
-    motion = A_star.motion_model(1)
     print('A-star calculating...')
+    t0 = tic()
 
     while len(self.open_list) > 0:
         # while end_node not in closed_list:
         iteration+=1  
-        print(iteration)
+        # print(iteration)
         smallest_node_pos = self.open_list.popitem()[0]
         closed_list.append( self.state_graph[smallest_node_pos]['node'])
         self.state_graph[smallest_node_pos]['open?'] = False
 
-        if self.state_graph[smallest_node_pos]['node'] ==  env.goal_node:
+        if self.state_graph[smallest_node_pos]['node'] ==  self.env.goal_node:
             print("A-star return!")
-            # return open_node
-            return self.state_graph
-            # return A_star.recover_path(self.state_graph[smallest_node_pos]['node']), self.state_graph
-            # return state_graph
-
-        stage_cost = 1 
+            toc(t0, nm="AMRA search")
+            # print(self.state_graph[smallest_node_pos]['node'])
+            return A_star.recover_path(self.state_graph[smallest_node_pos]['node']), self.state_graph
+        
         for closed_node in closed_list:
-          for resolution_iter in reversed(range(self.resolution)):
+          # for resolution_iter in reversed(range(self.resolution)):
+          stop_multi_resoltion = False
+          for resolution_iter in range(self.resolution):
             motion = A_star.motion_model(resolution_iter)
             for move in motion:
               # print('one move')
               x_pos = closed_node.pos[0] + move[0]
               y_pos = closed_node.pos[1] + move[1]
-              closed_pos = 
+              closed_pos = np.array([closed_node.pos[0],closed_node.pos[1]])
               node_pos = np.array([x_pos,y_pos])
+            
               # the following is to check the if the movment is valid
               if ( node_pos[0] < 0 or node_pos[0] >= self.envmap.shape[0] or node_pos[1] < 0 or node_pos[1] >= self.envmap.shape[1] ):
-              # print('ERROR: out-of-map robot position commanded\n')
+                # print('ERROR: out-of-map robot position commanded\n')
                 if resolution_iter == 0:
                   continue
                 else:
+                  stop_multi_resoltion = True
                   break
               elif ( self.envmap[node_pos[0], node_pos[1]] != 0 ): #check the center point first 
-              # print('ERROR: invalid robot position commanded\n')
+                # print('ERROR: invalid robot position commanded\n')
                 if resolution_iter == 0:
                   continue
                 else:
+                  stop_multi_resoltion = True
                   break
               elif self.check_window(node_pos,resolution_iter):#check whether the window is occupied 
+                # print('ERROR: invalid window check position commanded\n')
                 if resolution_iter == 0:
                   continue
                 else:
+                  stop_multi_resoltion = True
                   break
-              elif self.state_graph[str(node_pos)] != None:
-                if self.state_graph[str(node_pos)]['open?'] == False:
+              elif self.state_graph[str(tuple(node_pos))] != None:
+                if self.state_graph[str(tuple(node_pos))]['open?'] == False:
                   if resolution_iter == 0:
                     continue
                   else:
+                    stop_multi_resoltion = True
                     break
-              if self.state_graph[str(node_pos)] == None:
+
+              if self.state_graph[str(tuple(node_pos))] == None:
                   child  = A_star.node(closed_node,tuple(node_pos))
-                  child.g = closed_node.g + stage_cost(closed_node.pos,node_pos)
-                  child.h = env.getHeuristic(child,epsilon)
+                  child.g = closed_node.g + self.stage_cost(closed_pos,node_pos)
+                  child.h = self.env.getHeuristic(child,epsilon)
                   child.f = child.g + child.h
-                  self.state_graph[str(node_pos)] = {'open?':True,'node':child}
-                  self.open_list[str(node_pos)] = child.f
+                  self.state_graph[str(tuple(node_pos))] = {'open?':True,'node':child}
+                  self.open_list[str(tuple(node_pos))] = child.f
 
-              elif (closed_node.g + stage_cost) < self.state_graph[str(node_pos)]['node'].g:
-                  self.state_graph[str(node_pos)]['node'].parent = closed_node
-                  self.state_graph[str(node_pos)]['node'].g = closed_node.g + stage_cost
-                  self.state_graph[str(node_pos)]['node'].f = self.state_graph[str(node_pos)]['node'].g + self.state_graph[str(node_pos)]['node'].h
-                  self.state_graph[str(node_pos)]['open?'] = True
+              elif (closed_node.g + self.stage_cost(closed_pos,node_pos) < self.state_graph[str(tuple(node_pos))]['node'].g):
+                  self.state_graph[str(tuple(node_pos))]['node'].parent = closed_node
+                  self.state_graph[str(tuple(node_pos))]['node'].g = closed_node.g + self.stage_cost(closed_pos,node_pos)
+                  self.state_graph[str(tuple(node_pos))]['node'].f = self.state_graph[str(tuple(node_pos))]['node'].g + self.state_graph[str(tuple(node_pos))]['node'].h
+                  self.state_graph[str(tuple(node_pos))]['open?'] = True
 
-          closed_list.pop(0)
+            if stop_multi_resoltion and resolution_iter!= 0:
+              break
+        closed_list.pop(0)
 
 if __name__ == '__main__':
 
-    envmap = loadtxt('maps/map0.txt')
-    robotstart = np.array((0, 2))
-    targetstart = np.array((5, 3))
-
-    envmap = loadtxt('maps/map2.txt')
-    robotstart = np.array((0, 2))
-    targetstart = np.array((7, 9))
-
-    envmap = loadtxt('maps/map3.txt')
-    #test map3 case 1
-    robotstart = np.array([249, 249])
-    targetstart = np.array([399, 399])
-    # #test map3 case 2
-    robotstart = np.array([74, 249])
-    targetstart = np.array([399, 399])
-    # # #test map3 case 3
-    robotstart = np.array([4, 399])
-    targetstart = np.array([399, 399])
-
-    # envmap = loadtxt('maps/map4.txt')
-    # robotstart = np.array([0, 0])
-    # targetstart = np.array([5, 6])
-
-    # envmap = loadtxt('maps/map5.txt')
-    # robotstart = np.array([0, 0])
-    # targetstart = np.array([29, 59])
+    if TEST_MAP == 1: # large map
+      envmap = loadtxt('maps/map7.txt')
+      robotstart = np.array([1, 1])
+      targetstart = np.array([4998, 4998])
+    elif TEST_MAP == 2:# medium map
+      envmap = loadtxt('maps/map1.txt')
+      robotstart = np.array([249, 1199])
+      targetstart = np.array([1649, 1899])
+    elif TEST_MAP == 3:#small map
+      envmap = loadtxt('maps/map3.txt')
+      #test map3 case 1
+      robotstart = np.array([249, 249])
+      targetstart = np.array([399, 399])
+      # #test map3 case 2
+      robotstart = np.array([74, 249])
+      targetstart = np.array([399, 399])
+      # # #test map3 case 3
+      robotstart = np.array([0, 0])
+      targetstart = np.array([399, 399])
     
-    # envmap = loadtxt('maps/map6.txt')
-    # robotstart = np.array([0, 0])
-    # targetstart = np.array([29, 36])
-
-    # envmap = loadtxt('maps/map1.txt')
-    # robotstart = np.array([249, 1199])
-    # targetstart = np.array([1649, 1899])
-
-    # envmap = loadtxt('maps/map7.txt')
-    # robotstart = np.array([1, 1])
-    # targetstart = np.array([4998, 4998])
-
     env = Env(targetstart,envmap)
-    t0 = tic()
-    
-    Astar = A_star(env,resolution=4)
+    Astar = A_star(env,resolution=RES)
+    path,graph = Astar.Go_Astar(robotstart,epsilon=EPSLION)
 
-    path,graph = Astar.Go_Astar(env,robotstart,epsilon=3)
-
-    # graph = Astar.Go_Astar(robotstart,epsilon=3)
-    
-    # graph = Astar.Go_Astar(env,robotstart,epsilon=3)
-
-    toc(t0,'A-star get_path')
     now_pos = robotstart
     img = envmap
     for idx in range(envmap.shape[0]):
