@@ -9,11 +9,11 @@ The repo for ERL Motion Planning research purpose. The basic idea is using A* wi
 1. <i>Developing</i>
   - <b>AMRA - Python </b> -<i>due next Tuesday 11/15/22</i>
   - Consider the Hierarchical Multisolution fror quadtree
-  - Rear paper of A* with B-spline and polynomial representation
+  - Read paper of A* with B-spline and polynomial representation
   - ERL Astar hashing and polynomial functions
   
 2. <i>Finished</i>
-  - A* with layer multi-resolutions - Python -<i>due next Tuesday 11/14/22</i>
+  - A* with layer multi-resolutions - Python -<i>11/14/22</i>
   - ~quadtree neighbor detection - Python </b> -<i>11/1/22~
   - Basic Astar with pqdict - <i>10/23/22</i>
   - Basic quadtree - <i>10/22/22</i>
