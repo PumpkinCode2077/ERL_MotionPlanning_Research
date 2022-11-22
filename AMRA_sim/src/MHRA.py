@@ -4,17 +4,15 @@ import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
 '''
-Author: Shusen Lin, Rohan Bosworth
+Author: Shusen Lin
 This is the AMRA demo programm developed for ERL motion planning research purpose
 This A* algorithm with multi-resolution and multi-heursitic strategies 
 
 Update the Multiresolution - large map test needed
 
-Adding the Multi-Heuristic features:
-Test with two openlist, norm 1 and norm 2, heursitic function can be changed in future
-
+Adding the Multi-Heuristic features
 '''
-TEST_MAP = 4 #1->large map, 2->medium map, 3->small map
+TEST_MAP = 4 #1->large map, 2->medium map, 3->small map， 4->tiny map
 RES = 1 #largest resolution for search, 3**RES
 EPSLION = 1 #weighted A* parameters
 NORM = 1 # option for h value
