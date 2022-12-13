@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
 '''
-Author: Shusen Lin
+Author: Shusen Lin, Vaibhav Bishi
 This is the AMRA demo programm developed for ERL motion planning research purpose
 This A* algorithm with multi-resolution and multi-heursitic strategies 
 
@@ -12,13 +12,13 @@ Update the Multiresolution - large map test needed
 
 Adding the Multi-Heuristic features
 '''
-TEST_MAP = 4 #1->large map, 2->medium map, 3->small map， 4->tiny map
+TEST_MAP =  3#1->large map, 2->medium map, 3->small map， 4->tiny map
 RES = 1 #largest resolution for search, 3**RES
-EPSLION = 1 #weighted A* parameters
+EPSLION = 3 #weighted A* parameters
 NORM = 1 # option for h value
 NH = 2 #number of heuristic
-W1 = 1
-W2 = 1
+W1 = 3
+W2 = 1.2
 
 def tic():
   return time.time()
@@ -38,11 +38,12 @@ class Env:
   def getHeuristic(self,input_node,epslion,nh):
     x_distance = np.abs(input_node.pos[0]-self.goal_node.pos[0])
     y_distance = np.abs(input_node.pos[1]-self.goal_node.pos[1])
-    if nh == 0:
+    if nh == 1:
       h_value = x_distance+y_distance# norm 1  
-    elif nh == 1:
+      
+    elif nh == 0:
       h_value = np.linalg.norm([x_distance,y_distance])#norm 2
-
+      
     return h_value*epslion
 
 class A_star:
@@ -120,16 +121,16 @@ class A_star:
 
     return motion
 
-  def action_back(child_node,parent_node):
+  def action_back(self,child_node,parent_node):
       if parent_node is not None:
         x_move = child_node.pos[0] - parent_node.pos[0]
         y_move = child_node.pos[1] - parent_node.pos[1]
       return (x_move,y_move)
 
-  def recover_path(current_node):
+  def recover_path(self,current_node):
     action = []
     while current_node.parent is not None:
-      action.insert(0,A_star.action_back(current_node,current_node.parent))
+      action.insert(0,self.action_back(current_node,current_node.parent))
       current_node = current_node.parent
     return action
   
@@ -156,8 +157,12 @@ class A_star:
   
   def ExpandState(self,current_pos):
     for hdx in range(NH):
-      self.open_list[hdx].pop(current_pos)  
- 
+      if(self.open_list[hdx]):
+        try:
+          self.open_list[hdx].pop(current_pos)  
+        except:
+          KeyError
+
     # print(len(self.open_list[0]))
     closed_node = self.state_graph[current_pos]['node']
 
@@ -193,13 +198,13 @@ class A_star:
           else:
             stop_multi_resoltion = True
             break
-        elif self.state_graph[str(tuple(node_pos))] != None:
-          if self.state_graph[str(tuple(node_pos))]['open?'] == False:
-            if resolution_iter == 0:
-              continue
-            else:
-              stop_multi_resoltion = True
-              break
+        # elif self.state_graph[str(tuple(node_pos))] != None:
+        #   if self.state_graph[str(tuple(node_pos))]['open?'] == False:
+        #     if resolution_iter == 0:
+        #       continue
+        #     else:
+        #       stop_multi_resoltion = True
+        #       break
         #***************************************************************************************************************
         if self.state_graph[str(tuple(node_pos))] == None:
             child  = A_star.node(closed_node,tuple(node_pos))
@@ -256,18 +261,26 @@ class A_star:
     t0 = tic()
 
     while len(self.open_list[0]) > 0:
+        # print(self.open_list[0])
+        # print(self.open_list[1])
         # while end_node not in closed_list:
         iteration+=1  
         # print(self.state_graph[str(tuple(end_pos))]['node'].g)
         #Go over all the heursitics except the anchor search
         # print(self.open_list[0].topitem())
         for hdx in range(1,NH):
-          if self.open_list[hdx].topitem()[1] <= W2*self.open_list[0].topitem()[1]:
+          if self.open_list[hdx]:
+            temp = self.open_list[hdx].topitem()[1]
+          else:
+            temp =np.inf
+          if temp <= W2*self.open_list[0].topitem()[1]:
             if self.state_graph[str(tuple(end_pos))]['node'].g <= self.open_list[hdx].topitem()[1]:
               if self.state_graph[str(tuple(end_pos))]['node'].g < np.inf:
                 print("MHRA end, return the path!")
                 toc(t0, nm="AMRA search")
-                return A_star.recover_path(self.state_graph[end_pos]['node']), self.state_graph
+                print(len(self.closed_list_anchor))
+                print(len(self.closed_list_inad))
+                return self.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph
               
             else:
               smallest_node_pos = self.open_list[hdx].topitem()[0]
@@ -280,16 +293,23 @@ class A_star:
               if self.state_graph[str(tuple(end_pos))]['node'].g < np.inf:
                 print("MHRA end, return the path!")
                 toc(t0, nm="AMRA search")
-                return A_star.recover_path(self.state_graph[end_pos]['node']), self.state_graph
+                print(len(self.closed_list_anchor))
+                print(len(self.closed_list_inad))
+                return self.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph
             else:
+              
               smallest_node_pos = self.open_list[0].topitem()[0]
               self.ExpandState(smallest_node_pos)
+              # print(smallest_node_pos)
               self.closed_list_anchor.append(self.state_graph[smallest_node_pos]['node'].pos)
+              # print(self.closed_list_anchor)
               self.state_graph[smallest_node_pos]['open?'] = False
 
+    # print(self.state_graph['(29, 60)']['node'].g)
+    # print(self.state_graph[str(tuple(end_pos))]['node'])
     print(len(self.closed_list_anchor))
     print(len(self.closed_list_inad))
-    return A_star.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph     
+    return self.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph     
 
 if __name__ == '__main__':
 
@@ -310,7 +330,7 @@ if __name__ == '__main__':
       robotstart = np.array([74, 249])
       targetstart = np.array([399, 399])
       # # #test map3 case 3
-      robotstart = np.array([0, 0])
+      # robotstart = np.array([0, 0])
       targetstart = np.array([399, 399])
     elif TEST_MAP == 4:#tiny map
       envmap = loadtxt('maps/map5.txt')
