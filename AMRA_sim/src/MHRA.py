@@ -3,6 +3,7 @@ import time
 import matplotlib.pyplot as plt
 from numpy import loadtxt
 from pqdict import pqdict
+import utils as tools
 '''
 Author: Shusen Lin, Vaibhav Bishi
 This is the AMRA demo programm developed for ERL motion planning research purpose
@@ -16,35 +17,80 @@ TEST_MAP =  3#1->large map, 2->medium map, 3->small map， 4->tiny map
 RES = 1 #largest resolution for search, 3**RES
 EPSLION = 3 #weighted A* parameters
 NORM = 1 # option for h value
-NH = 2 #number of heuristic
-W1 = 3
-W2 = 1.2
+NH = 2 # number of heuristic
+W1 = 1 # expanding speed
+W2 = 1 # use of inadmissble heuristic
+DF_COEFFICIENT_b = 20
+RAD = 100
 
-def tic():
-  return time.time()
-def toc(tstart, nm=""):
-  print('%s took: %s sec.\n' % (nm,(time.time() - tstart)))
 
 class Env:
-  def __init__(self,target_pos,envmap):
-    self.goal_node = A_star.node(None,tuple(target_pos))
+  def __init__(self,robot_pos,target_pos,envmap):
     self.map  = envmap
+    self.robot_start = robot_pos
+    self.target_end  = target_pos
+    self.straight_bad_points = self.generate_straight_bad()
+    DF_COEFFICIENT_a = np.min(self.map.shape)
+    # print(DF_COEFFICIENT_a)
+    self.DF_COEFFICIENT  = DF_COEFFICIENT_a * DF_COEFFICIENT_b
 
   def isGoal(self,input_node):
     pos_node = input_node.pos
     pos_goal = self.goal.pos
     return pos_node == pos_goal
 
-  def getHeuristic(self,input_node,epslion,nh):
-    x_distance = np.abs(input_node.pos[0]-self.goal_node.pos[0])
-    y_distance = np.abs(input_node.pos[1]-self.goal_node.pos[1])
-    if nh == 1:
+  def generate_straight_bad(self):
+    '''
+    The function for generating the straight bad points
+    '''
+    sx = self.robot_start[0]
+    sy = self.robot_start[1]
+    ex = self.target_end[0]
+    ey = self.target_end[1]
+    bresenham = tools.bresenham2D(sx,sy,ex,ey)
+    bad_points = np.array([[0,0]])
+    for idx in range(len(bresenham[0])):
+      if self.map[bresenham[0][idx],bresenham[1][idx]] != 0:
+        bad_points = np.append(bad_points,[[bresenham[0][idx],bresenham[1][idx]]],axis=0)
+    return bad_points[1:]
+
+  def straight_traj_check(self,input_node,norm2):
+    x_pos = input_node.pos[0]
+    y_pos = input_node.pos[1]
+    current_pos = np.array([x_pos,y_pos])
+    dist = np.linalg.norm((current_pos-self.straight_bad_points),axis=1)
+    dist = np.min(dist)
+    if dist == 0:
+      return np.inf
+    elif dist < RAD:
+      value = 1/dist*self.DF_COEFFICIENT
+      return value
+    else:
+      return norm2+1
+
+  def get_multiHeuristic(self,input_node,nh):
+    '''
+    The function works for multi_heuristic
+    nh = 0: norm 1, admissible
+    nh = 1: norm 2, admissible
+    nh = 2: straight check, inadmissble 
+
+    input: the desired node for calculating the heuristic
+    nh:    the desired heuristic selection
+    '''
+    x_distance = np.abs(input_node.pos[0]-self.target_end[0])
+    y_distance = np.abs(input_node.pos[1]-self.target_end[1])
+    if nh == 3:
       h_value = x_distance+y_distance# norm 1  
-      
     elif nh == 0:
       h_value = np.linalg.norm([x_distance,y_distance])#norm 2
-      
-    return h_value*epslion
+    elif nh == 1:
+      norm2   = np.linalg.norm([x_distance,y_distance])
+      h_value = self.straight_traj_check(input_node,norm2)
+    return h_value
+
+  def getHeuristic(self,input_node,epslion,nh): 
+    return self.get_multiHeuristic(input_node,nh)*epslion
 
 class A_star:
   '''
@@ -253,21 +299,15 @@ class A_star:
 
     self.open_list[0][str(tuple(start_node.pos))] = start_node.f[0]
     self.open_list[1][str(tuple(start_node.pos))] = start_node.f[1]
-    print(self.open_list[0])
-    print(self.open_list[1])
+    # print(self.open_list[0])
+    # print(self.open_list[1])
 
     iteration = 0
-    print('A-star calculating...')
-    t0 = tic()
+    print('MHRA calculating...')
+    t0 = tools.tic()
 
     while len(self.open_list[0]) > 0:
-        # print(self.open_list[0])
-        # print(self.open_list[1])
-        # while end_node not in closed_list:
         iteration+=1  
-        # print(self.state_graph[str(tuple(end_pos))]['node'].g)
-        #Go over all the heursitics except the anchor search
-        # print(self.open_list[0].topitem())
         for hdx in range(1,NH):
           if self.open_list[hdx]:
             temp = self.open_list[hdx].topitem()[1]
@@ -277,9 +317,9 @@ class A_star:
             if self.state_graph[str(tuple(end_pos))]['node'].g <= self.open_list[hdx].topitem()[1]:
               if self.state_graph[str(tuple(end_pos))]['node'].g < np.inf:
                 print("MHRA end, return the path!")
-                toc(t0, nm="AMRA search")
-                print(len(self.closed_list_anchor))
-                print(len(self.closed_list_inad))
+                tools.toc(t0, nm="MHRA search")
+                print('anchor closed list length: '+ str(len(self.closed_list_anchor)))
+                print('inadmissible closed list length: '+ str(len(self.closed_list_inad)))
                 return self.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph
               
             else:
@@ -292,9 +332,9 @@ class A_star:
             if self.state_graph[str(tuple(end_pos))]['node'].g <= self.open_list[0].topitem()[1]:
               if self.state_graph[str(tuple(end_pos))]['node'].g < np.inf:
                 print("MHRA end, return the path!")
-                toc(t0, nm="AMRA search")
-                print(len(self.closed_list_anchor))
-                print(len(self.closed_list_inad))
+                tools.toc(t0, nm="AMRA search")
+                print('anchor closed list length: '+ str(len(self.closed_list_anchor)))
+                print('inadmissible closed list length: '+ str(len(self.closed_list_inad)))
                 return self.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph
             else:
               
@@ -305,10 +345,8 @@ class A_star:
               # print(self.closed_list_anchor)
               self.state_graph[smallest_node_pos]['open?'] = False
 
-    # print(self.state_graph['(29, 60)']['node'].g)
-    # print(self.state_graph[str(tuple(end_pos))]['node'])
-    print(len(self.closed_list_anchor))
-    print(len(self.closed_list_inad))
+    print('anchor closed_list length: '+ str(len(self.closed_list_anchor)))
+    print('inadmissible closed_list length: '+ str(len(self.closed_list_inad)))
     return self.recover_path(self.state_graph[str(tuple(end_pos))]['node']), self.state_graph     
 
 if __name__ == '__main__':
@@ -337,7 +375,8 @@ if __name__ == '__main__':
       robotstart = np.array([0, 0])
       targetstart = np.array([29, 59])
     
-    env = Env(targetstart,envmap)
+    env = Env(robotstart,targetstart,envmap)
+    # print(env.generate_straight_bad())
     Astar = A_star(env,resolution=RES)
     path,graph = Astar.Go_Astar(robotstart,targetstart,epsilon=EPSLION)
 
